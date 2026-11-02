@@ -16,50 +16,62 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Download repository
+      # 1. Download repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Node.js
+      # 2. Install Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
+      # 3. Install dependencies
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # 4. Build project
       - name: Build FlagshipRouter
         run: npm run build
 
-      - name: Start server
+      # 5. Start server
+      - name: Start FlagshipRouter
         run: |
           npm run start > server.log 2>&1 &
           echo $! > server.pid
 
+      # 6. Test server
       - name: Test server
         run: |
-          node <<'NODE'
+          node --input-type=module <<'NODE'
           const url = "http://127.0.0.1:20127/";
           let ready = false;
 
           for (let i = 0; i < 40; i++) {
             try {
               const response = await fetch(url);
+
               if (response.ok) {
                 console.log("FlagshipRouter is running!");
+                console.log("HTTP Status:", response.status);
                 ready = true;
                 break;
               }
-            } catch (error) {}
+            } catch (error) {
+              console.log(`Waiting for server... ${i + 1}/40`);
+            }
 
             await new Promise(resolve => setTimeout(resolve, 3000));
           }
 
           if (!ready) {
-            console.error("Server failed to respond.");
+            console.error("FlagshipRouter failed to respond.");
             process.exit(1);
           }
           NODE
 
+      # 7. Stop server
       - name: Stop server
         if: always()
         run: |
@@ -67,10 +79,20 @@ jobs:
             kill "$(cat server.pid)" || true
           fi
 
-      - name: Upload server logs
+      # 8. Show logs if failed
+      - name: Display server logs
+        if: failure()
+        run: |
+          if [ -f server.log ]; then
+            cat server.log
+          fi
+
+      # 9. Upload logs
+      - name: Upload logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: flagshiprouter-logs
           path: server.log
           if-no-files-found: ignore
+          retention-days: 3
