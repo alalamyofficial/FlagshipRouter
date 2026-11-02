@@ -16,22 +16,21 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # 1. Download repository
+      # 1. Download source code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Install Node.js
+      # 2. Install Node.js 22
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       # 3. Install dependencies
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      # 4. Build project
+      # 4. Build FlagshipRouter
       - name: Build FlagshipRouter
         run: npm run build
 
@@ -41,7 +40,7 @@ jobs:
           npm run start > server.log 2>&1 &
           echo $! > server.pid
 
-      # 6. Test server
+      # 6. Check server response
       - name: Test server
         run: |
           node --input-type=module <<'NODE'
@@ -59,14 +58,14 @@ jobs:
                 break;
               }
             } catch (error) {
-              console.log(`Waiting for server... ${i + 1}/40`);
+              console.log(`Waiting... ${i + 1}/40`);
             }
 
             await new Promise(resolve => setTimeout(resolve, 3000));
           }
 
           if (!ready) {
-            console.error("FlagshipRouter failed to respond.");
+            console.error("FlagshipRouter failed to start!");
             process.exit(1);
           }
           NODE
@@ -79,7 +78,7 @@ jobs:
             kill "$(cat server.pid)" || true
           fi
 
-      # 8. Show logs if failed
+      # 8. Display logs
       - name: Display server logs
         if: failure()
         run: |
