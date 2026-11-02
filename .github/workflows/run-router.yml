@@ -1,0 +1,76 @@
+
+name: FlagshipRouter CI Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build FlagshipRouter
+        run: npm run build
+
+      - name: Start server
+        run: |
+          npm run start > server.log 2>&1 &
+          echo $! > server.pid
+
+      - name: Test server
+        run: |
+          node <<'NODE'
+          const url = "http://127.0.0.1:20127/";
+          let ready = false;
+
+          for (let i = 0; i < 40; i++) {
+            try {
+              const response = await fetch(url);
+              if (response.ok) {
+                console.log("FlagshipRouter is running!");
+                ready = true;
+                break;
+              }
+            } catch (error) {}
+
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          }
+
+          if (!ready) {
+            console.error("Server failed to respond.");
+            process.exit(1);
+          }
+          NODE
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill "$(cat server.pid)" || true
+          fi
+
+      - name: Upload server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flagshiprouter-logs
+          path: server.log
+          if-no-files-found: ignore
